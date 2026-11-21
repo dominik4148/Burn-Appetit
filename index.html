@@ -296,6 +296,19 @@ nav.bottom .plus .e svg{stroke-width:3.2;filter:drop-shadow(0 1px 0 rgba(200,240
 .ico .c{width:62px;height:62px}
 .ico{width:70px}
 .field label .muted{color:#3a2716;font-family:"Nunito",sans-serif;font-weight:700;font-size:12px;text-shadow:0 1px 0 rgba(255,236,200,.35)}
+/* nákup – přidávání položek */
+.adder .search input{min-width:0}
+.adder .search .btn{flex:none}
+.sugg{display:flex;flex-direction:column;gap:6px;margin:-2px 0 10px}
+.sugg:empty{display:none}
+.sg{text-align:left;padding:10px 14px;border-radius:12px;background:var(--fabric);border:1px solid rgba(80,52,26,.4);
+  box-shadow:inset 0 0 10px rgba(96,64,32,.22),0 1px 2px rgba(40,24,10,.25);font-weight:700;color:var(--ink)}
+.sg.new{color:#3f6d58}
+.row{padding:0}
+.row .rowmain{display:flex;align-items:center;gap:12px;flex:1;padding:12px 14px;text-align:left;min-width:0}
+.row .rowx{width:44px;align-self:stretch;color:#7a5a3a;font-size:16px;flex:none}
+.row.got .t{text-decoration:line-through;opacity:.6}
+.row.got .box{background:#4a7c65;border-color:#2f5646;color:#f6ecd8}
 
 </style>
 </head>
@@ -373,7 +386,7 @@ function loadStore(){
   return {fav:[], buy:[], week:[[],[],[],[],[],[],[]], custom:[]};
 }
 let S = loadStore();
-S.fav ||= []; S.buy ||= []; S.week ||= [[],[],[],[],[],[],[]]; S.custom ||= []; S.edits ||= {}; S.deleted ||= [];
+S.fav ||= []; S.buy ||= []; S.week ||= [[],[],[],[],[],[],[]]; S.custom ||= []; S.edits ||= {}; S.deleted ||= []; S.home ||= []; S.got ||= [];
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast('Nepodařilo se uložit – málo místa (zkus menší fotku).'); } }
 
 /* vestavěné recepty: úpravy v S.edits (fotka jen když se změnila), smazané v S.deleted */
@@ -392,6 +405,7 @@ function stockNames(){
   const ids = new Set(S.fav.concat(S.week.flat()));
   const set = new Set();
   ids.forEach(id=>{ const r=byId(id); if(r) r.ing.forEach(i=>set.add(norm(cleanName(i.n)))); });
+  S.home.forEach(n=>set.add(n));
   return set;
 }
 function missingFor(r, stock){
@@ -540,12 +554,55 @@ function vShop(){
   const stock = stockNames();
   const buy = S.buy.slice().sort((a,b)=>a.localeCompare(b,'cs'));
   const home = [...stock].filter(n=>!S.buy.includes(n)).sort((a,b)=>a.localeCompare(b,'cs'));
+  const got = buy.filter(n=>S.got.includes(n)).length;
+  const adder = (list, ph) => `<div class="adder"><div class="search" style="margin:0 0 8px">➕<input id="add_${list}" data-addlist="${list}" type="text" placeholder="${ph}" autocomplete="off" enterkeyhint="done">
+      <button class="btn small" data-addtyped="${list}">Přidat</button></div><div class="sugg" id="sugg_${list}"></div></div>`;
   return `<h1>Nákup 🛒</h1>
     <h2>Koupit (${buy.length})</h2>
-    <div class="list">${buy.map(n=>`<button class="row buy" data-unbuy="${esc(n)}"><span class="box"></span><span class="t">${esc(n)}</span><span class="hint">koupeno ✓</span></button>`).join('') || '<div class="empty">Nic nechybí 🎉</div>'}</div>
+    ${adder('buy','Přidej, co chceš koupit…')}
+    <div class="list">${buy.map(n=>{ const g=S.got.includes(n); return `<div class="row buy ${g?'got':''}"><button class="rowmain" data-tick="${esc(n)}"><span class="box">${g?'✓':''}</span><span class="t">${esc(n)}</span></button><button class="rowx" data-unbuy="${esc(n)}" aria-label="Odebrat">✕</button></div>`;}).join('') || '<div class="empty">Nic nechybí 🎉</div>'}</div>
+    ${buy.length?`<p class="muted small">Při nákupu odškrtávej, co máš v košíku.</p>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn" data-boughtsel ${got?'':'disabled style="opacity:.5"'}>✓ Nakoupeno (${got})</button>
+      <button class="btn ghost" data-boughtall>🛒 Koupeno vše</button>
+    </div>`:''}
     <h2>Doma (${home.length})</h2>
-    <p class="muted small" style="margin-top:-6px">Suroviny z oblíbených receptů a týdenního plánu. Když něco dojde, ťukni na to.</p>
-    <div class="list">${home.map(n=>`<button class="row" data-tobuy="${esc(n)}"><span class="box">✓</span><span class="t">${esc(n)}</span><span class="hint">došlo</span></button>`).join('') || '<div class="empty">Dej srdíčko receptům, které vaříš, a jejich suroviny se tu objeví.</div>'}</div>`;
+    ${adder('home','Přidej, co máš doma…')}
+    <p class="muted small" style="margin-top:-2px">Suroviny z oblíbených receptů, týdne a ty, co sis přidal. Když něco dojde, ťukni na to.</p>
+    <div class="list">${home.map(n=>`<div class="row"><button class="rowmain" data-tobuy="${esc(n)}"><span class="box">✓</span><span class="t">${esc(n)}</span><span class="hint">došlo</span></button>${S.home.includes(n)?`<button class="rowx" data-unhome="${esc(n)}" aria-label="Odebrat">✕</button>`:''}</div>`).join('') || '<div class="empty">Zatím nic. Přidej položku nahoře nebo dej srdíčko receptům, které vaříš.</div>'}</div>`;
+}
+function allIngredients(){
+  const set = new Set(S.home.concat(S.buy));
+  all().forEach(r=>r.ing.forEach(i=>set.add(norm(cleanName(i.n)))));
+  return [...set];
+}
+function suggestions(list, q){
+  q = norm(q); if(!q) return [];
+  const stock = stockNames();
+  const inList = n => list==='buy' ? S.buy.includes(n) : (stock.has(n) && !S.buy.includes(n));
+  const pool = allIngredients().filter(n=>!inList(n));
+  const starts = pool.filter(n=>n.startsWith(q)).sort((a,b)=>a.localeCompare(b,'cs'));
+  const rest = pool.filter(n=>!n.startsWith(q) && n.includes(q)).sort((a,b)=>a.localeCompare(b,'cs'));
+  return starts.concat(rest).slice(0,8);
+}
+function drawSugg(list){
+  const inp = $('#add_'+list), box = $('#sugg_'+list); if(!inp||!box) return;
+  const q = inp.value.trim(), res = suggestions(list, q);
+  box.innerHTML = q ? res.map(n=>`<button class="sg" data-addsugg="${list}|${esc(n)}">${esc(n)}</button>`).join('')
+    + (res.includes(norm(q)) ? '' : `<button class="sg new" data-addsugg="${list}|${esc(q)}">➕ Přidat „${esc(q)}“</button>`) : '';
+}
+function addItem(list, name){
+  const n = norm(name); if(!n) return;
+  if(list==='buy'){ if(!S.buy.includes(n)) S.buy.push(n); toast('Přidáno do nákupu 🛒'); }
+  else { S.buy = S.buy.filter(x=>x!==n); S.got = S.got.filter(x=>x!==n); if(!stockNames().has(n)) S.home.push(n); toast('Přidáno do Doma ✓'); }
+  save(); render();
+  const inp = $('#add_'+list); if(inp) inp.focus();
+}
+function moveHome(names){
+  const stock = stockNames();
+  names.forEach(n=>{ if(!stock.has(n) && !S.home.includes(n)) S.home.push(n); });
+  S.buy = S.buy.filter(x=>!names.includes(x)); S.got = S.got.filter(x=>!names.includes(x));
+  save(); render(); toast(names.length+'× přesunuto do Doma ✓');
 }
 
 function vAdd(v){
@@ -599,6 +656,10 @@ function render(){
   const q = $('#q');
   if(q){ q.addEventListener('input', e=>{ homeQuery=e.target.value; const t=document.createElement('div'); t.innerHTML=vHome(); $('#homebody').innerHTML=t.querySelector('#homebody').innerHTML; }); }
   const ph = $('#f_photo'); if(ph) ph.addEventListener('change', onPhoto);
+  document.querySelectorAll('[data-addlist]').forEach(inp=>{
+    inp.addEventListener('input',()=>drawSugg(inp.dataset.addlist));
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addItem(inp.dataset.addlist, inp.value); } });
+  });
   const im = $('#f_import'); if(im) im.addEventListener('change', onImport);
 }
 
@@ -694,7 +755,7 @@ function deleteRecipe(id){
 }
 function onImport(e){
   const f = e.target.files[0]; if(!f) return;
-  f.text().then(t=>{ const d = JSON.parse(t); if(!d.custom) throw 0; S = Object.assign({fav:[],buy:[],week:[[],[],[],[],[],[],[]],custom:[],edits:{},deleted:[]}, d); save(); toast('Záloha nahrána ✓'); render(); })
+  f.text().then(t=>{ const d = JSON.parse(t); if(!d.custom) throw 0; S = Object.assign({fav:[],buy:[],week:[[],[],[],[],[],[],[]],custom:[],edits:{},deleted:[],home:[],got:[]}, d); save(); toast('Záloha nahrána ✓'); render(); })
    .catch(()=>toast('Tohle není platná záloha.'));
 }
 
@@ -748,8 +809,14 @@ document.addEventListener('click', e=>{
   if(d.tagtoggle){ const v=cur(); const i=v.tags.indexOf(d.tagtoggle); i>=0?v.tags.splice(i,1):v.tags.push(d.tagtoggle); render(); return; }
   if(d.time){ cur().time=d.time; render(); return; }
   if(d.cart){ const n=norm(d.cart); const i=S.buy.indexOf(n); i>=0?S.buy.splice(i,1):S.buy.push(n); save(); toast(i>=0?'Odebráno z nákupu':'Přidáno do nákupu 🛒'); render(); return; }
-  if(d.tobuy){ S.buy.push(norm(d.tobuy)); save(); render(); return; }
-  if(d.unbuy){ S.buy = S.buy.filter(x=>x!==d.unbuy); save(); render(); return; }
+  if(d.tobuy){ if(!S.buy.includes(d.tobuy)) S.buy.push(norm(d.tobuy)); save(); render(); return; }
+  if(d.unbuy){ S.buy = S.buy.filter(x=>x!==d.unbuy); S.got = S.got.filter(x=>x!==d.unbuy); save(); render(); return; }
+  if(d.tick){ const i=S.got.indexOf(d.tick); i>=0?S.got.splice(i,1):S.got.push(d.tick); save(); render(); return; }
+  if(d.unhome){ S.home = S.home.filter(x=>x!==d.unhome); save(); render(); return; }
+  if(d.addsugg){ const [l,...n]=d.addsugg.split('|'); addItem(l, n.join('|')); return; }
+  if(d.addtyped){ const inp=$('#add_'+d.addtyped); addItem(d.addtyped, inp?inp.value:''); return; }
+  if(d.boughtsel!==undefined){ moveHome(S.buy.filter(n=>S.got.includes(n))); return; }
+  if(d.boughtall!==undefined){ if(confirm('Přesunout celý nákupní seznam do Doma?')) moveHome(S.buy.slice()); return; }
   if(d.cook){ startCook(d.cook); return; }
   if(d.cookclose!==undefined){ endCook(); return; }
   if(d.cooknext!==undefined){ if(cookState.i < cookState.r.steps.length-1){ cookState.i++; drawCook(); } else { endCook(); toast('Dobrou chuť! 😋'); } return; }
