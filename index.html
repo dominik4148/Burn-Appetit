@@ -309,6 +309,12 @@ nav.bottom .plus .e svg{stroke-width:3.2;filter:drop-shadow(0 1px 0 rgba(200,240
 .row .rowx{width:44px;align-self:stretch;color:#7a5a3a;font-size:16px;flex:none}
 .row.got .t{text-decoration:line-through;opacity:.6}
 .row.got .box{background:#4a7c65;border-color:#2f5646;color:#f6ecd8}
+/* co můžu uvařit teď – recepty s chybějícími surovinami */
+.divider{display:flex;align-items:center;gap:10px;margin:22px 0 4px;color:#2c1b0e;font-family:var(--hand2);font-size:19px;text-shadow:0 1px 0 rgba(255,236,200,.35)}
+.divider::before,.divider::after{content:"";flex:1;height:2px;background:rgba(44,27,14,.45);border-radius:2px}
+.cards.dim .card{filter:saturate(.55);opacity:.82}
+.missbadge{flex:none;min-width:34px;height:26px;padding:0 8px;border-radius:13px;display:grid;place-items:center;
+  background:#a1562a;color:#f8ead6;font-weight:800;font-size:13px;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
 
 </style>
 </head>
@@ -409,8 +415,11 @@ function stockNames(){
   return set;
 }
 function missingFor(r, stock){
+  // co mám doma = zásoby bez věcí v nákupu; shoda i když je název delší/kratší (např. „rýže“ ~ „uvařená rýže“)
+  const have = [...stock].filter(n=>!S.buy.includes(n));
+  const ok = n => have.some(h => h===n || (h.length>=3 && n.includes(h)) || (n.length>=3 && h.includes(n)));
   return r.ing.filter(i=>!isOptional(i)).map(i=>norm(cleanName(i.n)))
-    .filter(n=>!PANTRY.includes(n) && (!stock.has(n) || S.buy.includes(n)));
+    .filter(n=>!PANTRY.includes(n) && !ok(n));
 }
 
 /* ---------- navigace ---------- */
@@ -518,18 +527,25 @@ function vRecipe(v){
 
 function vCookNow(){
   const stock = stockNames();
-  const favs = S.fav.length + S.week.flat().length;
-  if(!favs) return `<div class="topbar"><button class="iconbtn" data-back>←</button><div class="title">Co můžu uvařit teď?</div></div>
-    <div class="empty"><div class="big">🤍</div>Zatím nemáš žádné oblíbené recepty.<br><br>Dej srdíčko receptům, které vaříš – jejich suroviny se stanou tvými zásobami doma. Co ti dojde, označ v Nákupu.</div>`;
+  const top = `<div class="topbar"><button class="iconbtn" data-back>←</button><div class="title">Co můžu uvařit teď?</div></div>`;
+  if(![...stock].some(n=>!S.buy.includes(n))) return top+`<div class="empty"><div class="big">🧺</div>Zatím nevím, co máš doma.<br><br>V Nákupu přidej do sekce <b>Doma</b> suroviny, které máš (nebo dej srdíčko receptům, které vaříš) a já projdu všechny recepty.</div>`;
   const rows = all().map(r=>({r, m:missingFor(r,stock)}));
   const ready = rows.filter(x=>x.m.length===0);
-  const almost = rows.filter(x=>x.m.length>0 && x.m.length<=2).sort((a,b)=>a.m.length-b.m.length);
-  return `<div class="topbar"><button class="iconbtn" data-back>←</button><div class="title">Co můžu uvařit teď?</div></div>
+  const almost = rows.filter(x=>x.m.length>=1 && x.m.length<=3)
+    .sort((a,b)=>a.m.length-b.m.length || a.r.name.localeCompare(b.r.name,'cs'));
+  const miss = x => `<div class="miss">Chybí: ${esc(x.m.join(', '))}</div>`;
+  const badge = n => `<span class="missbadge">−${n}</span>`;
+  let groups = '';
+  for(const k of [1,2,3]){
+    const g = almost.filter(x=>x.m.length===k); if(!g.length) continue;
+    groups += `<div class="divider"><span>Chybí ${k} ${k===1?'surovina':'suroviny'} (${g.length})</span></div>
+      <div class="cards dim">${g.map(x=>card(x.r, miss(x)).replace('<button class="heart"', badge(k)+'<button class="heart"')).join('')}</div>`;
+  }
+  return top+`
     <h2>✅ Máš všechno (${ready.length})</h2>
-    <div class="cards">${ready.map(x=>card(x.r)).join('') || '<div class="empty">Zatím nic – podívej se níž, co chybí.</div>'}</div>
-    <h2>🛒 Chybí 1–2 věci (${almost.length})</h2>
-    <div class="cards">${almost.slice(0,40).map(x=>card(x.r, `<div class="miss">Chybí: ${esc(x.m.join(', '))}</div>`)).join('')}</div>
-    <p class="muted small">Počítá se se surovinami z oblíbených receptů a týdenního plánu. Sůl, pepř a olej bere jako samozřejmost.</p>`;
+    <div class="cards">${ready.map(x=>card(x.r)).join('') || '<div class="empty">Na žádný recept nemáš úplně všechno – podívej se níž, co chybí.</div>'}</div>
+    ${groups}
+    <p class="muted small" style="margin-top:14px">Procházím všech ${rows.length} receptů podle toho, co máš v sekci Doma. Sůl, pepř, olej a vodu beru jako samozřejmost.</p>`;
 }
 
 function vFav(){
